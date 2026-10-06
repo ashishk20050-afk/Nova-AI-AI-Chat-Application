@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova AI Pro</title>
+
+  <!-- Tailwind CSS -->
+  <link rel="stylesheet" href="/static/css/main.css">
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* Extra responsive tweaks */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+    }
+
+    /* Bubble styling */
+    .user-bubble { background-color: #3B82F6; color: white; padding: 0.75rem; border-radius: 1rem; max-width: 70%; }
+    .ai-bubble { background-color: #444654; color: white; padding: 0.75rem; border-radius: 1rem; max-width: 70%; }
+    .flex-end { justify-content: flex-end; }
+  </style>
+</head>
+<body class="bg-[#343541] text-white font-[Inter] h-screen flex">
+
+<!-- SIDEBAR -->
+<div class="sidebar w-64 bg-[#202123] flex flex-col">
+  <div class="p-4 border-b border-gray-700">
+    <h1 class="text-xl font-semibold">⚡ Nova AI Pro</h1>
+  </div>
+
+  <div class="flex-1 p-3 space-y-2 overflow-y-auto">
+    <button class="w-full text-left p-3 rounded-lg bg-[#343541] hover:bg-gray-700">
+      + New Chat
+    </button>
+
+    <div class="text-gray-400 text-sm mt-4">History</div>
+    <div id="historyList" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- MAIN CHAT AREA -->
+<div class="flex-1 flex flex-col">
+
+  <!-- HEADER -->
+  <div class="p-4 border-b border-gray-700 text-center font-semibold">
+    Nova AI Assistant
+  </div>
+
+  <!-- CHAT MESSAGES -->
+  <div id="chatBox" class="flex-1 overflow-y-auto p-6 space-y-4"></div>
+
+  <!-- INPUT AREA -->
+  <div class="p-4 border-t border-gray-700">
+    <div class="flex gap-2">
+      <input id="userInput" type="text" placeholder="Send a message..." class="flex-1 p-3 rounded-lg bg-[#40414F] outline-none">
+      <button id="sendBtn" class="px-6 bg-green-500 rounded-lg hover:bg-green-600">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const chatBox = document.getElementById("chatBox");
+  const input = document.getElementById("userInput");
+  const sendBtn = document.getElementById("sendBtn");
+
+  // Load chat history from localStorage
+  let chatHistory = JSON.parse(localStorage.getItem("novaAIHistory")) || [];
+
+  function saveHistory() {
+    localStorage.setItem("novaAIHistory", JSON.stringify(chatHistory));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const historyList = document.getElementById("historyList");
+    historyList.innerHTML = "";
+    chatHistory.forEach((chat, idx) => {
+      const div = document.createElement("div");
+      div.className = "p-2 rounded hover:bg-gray-700 cursor-pointer";
+      div.textContent = `Chat ${idx + 1}`;
+      div.addEventListener("click", () => loadChat(idx));
+      historyList.appendChild(div);
+    });
+  }
+
+  function loadChat(idx) {
+    chatBox.innerHTML = "";
+    chatHistory[idx].messages.forEach(msg => {
+      if(msg.sender === "user") addUser(msg.text, false);
+      else streamText(msg.text, false);
+    });
+  }
+
+  // Send message on Enter or Button click
+  input.addEventListener("keypress", e => { if(e.key === "Enter") sendMessage(); });
+  sendBtn.addEventListener("click", sendMessage);
+
+  function addUser(text, save=true) {
+    const div = document.createElement("div");
+    div.className = "flex flex-end";
+    div.innerHTML = `<div class="user-bubble">${text}</div>`;
+    chatBox.appendChild(div);
+    scrollBottom();
+    if(save) {
+      if(!chatHistory.length) chatHistory.push({messages: []});
+      chatHistory[chatHistory.length-1].messages.push({sender:"user", text});
+      saveHistory();
+    }
+  }
+
+  function showTyping() {
+    const div = document.createElement("div");
+    div.id = "typing";
+    div.className = "ai-bubble";
+    div.textContent = "Nova AI is typing... 🤖";
+    chatBox.appendChild(div);
+    scrollBottom();
+  }
+
+  function removeTyping() {
+    const typingDiv = document.getElementById("typing");
+    if(typingDiv) typingDiv.remove();
+  }
+
+  function streamText(text, save=true) {
+    const div = document.createElement("div");
+    div.className = "ai-bubble";
+    chatBox.appendChild(div);
+    let i = 0;
+    const interval = setInterval(() => {
+      div.innerHTML += text.charAt(i);
+      scrollBottom();
+      i++;
+      if(i >= text.length) clearInterval(interval);
+    }, 20);
+
+    if(save) {
+      if(!chatHistory.length) chatHistory.push({messages: []});
+      chatHistory[chatHistory.length-1].messages.push({sender:"ai", text});
+      saveHistory();
+    }
+  }
+
+  async function sendMessage() {
+    const message = input.value.trim();
+    if(!message) return;
+
+    addUser(message);
+    input.value = "";
+    showTyping();
+
+    try {
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({message})
+      });
+      const data = await res.json();
+      removeTyping();
+      streamText(data.reply);
+    } catch(err) {
+      removeTyping();
+      streamText("Error connecting to AI 🤖");
+      console.error(err);
+    }
+  }
+
+  function scrollBottom() {
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  // Initialize first chat in history if empty
+  if(chatHistory.length === 0) chatHistory.push({messages: []});
+  renderHistory();
+</script>
+
+</body>
+</html>
